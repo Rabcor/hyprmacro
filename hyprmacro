@@ -1,0 +1,277 @@
+#!/bin/bash
+#TODO: Some characters (+, -) need to be input as a string (plus, minus)
+#TODO: Sometimes keypresses don't register properly when a game is not in focus, work around this.
+#TODO: Conditional for if a key is down when macro started (maybe too complicated?)
+
+MODE="cancel"
+FOCUS_REQUIRED=false
+
+APP="$(hyprctl -j activewindow | jq -r '"address:\(.address)"')"
+ACTIVE_ADDRESS="$APP"
+
+MACRO=()
+
+LOOP=1
+LOOPCOUNT=0
+
+declare -A MOUSE_MAP=( # These are aliases that can be used when calling for mouse button presses.
+    ["mouse_left"]="mouse:272"
+    ["mouse_right"]="mouse:273"
+    ["mouse_middle"]="mouse:274"
+    ["mouse_back"]="mouse:275"
+    ["mouse_forward"]="mouse:276"
+    ["mouse1"]="mouse:272"
+    ["mouse2"]="mouse:273"
+    ["mouse3"]="mouse:274"
+    ["mouse4"]="mouse:275"
+    ["mouse5"]="mouse:276"
+    ["mouse_wheel_left"]="mouse_left"
+    ["mouse_wheel_right"]="mouse_right"
+    ["mouse_wheel_down"]="mouse_down"
+    ["mouse_wheel_up"]="mouse_up"
+)
+
+declare -A SYMBOL_MAP=(
+    ["+"]="plus"
+    ["-"]="minus"
+    ["~"]="grave"
+    ["°"]="dead_abovering"
+)
+
+# Functions
+ms_to_s() {
+  printf "%d.%03d" $(($1 / 1000)) $(($1 % 1000))
+}   
+
+
+randomize () {
+	MIN=${1%-*}
+	MAX=${1#*-}
+	DIFF=$((MAX-MIN+1))
+	echo $((RANDOM%DIFF+MIN))
+}
+
+tab () {
+	CURRENT="$(hyprctl -j activewindow | jq -r '"address:\(.address)"')"
+	hyprctl dispatch "hl.dsp.cursor.move({ window = '$APP' })"
+	"$@"
+	hyprctl dispatch "hl.dsp.cursor.move({ window = '$CURRENT' })"
+	
+}
+
+key () {
+	KEY="${1##*+}"
+	MODS="${1%+*}"
+	[ "$MODS" != "$KEY" ] && MODS=${MODS//+/ } || unset MODS
+	[[ -v MOUSE_MAP["$KEY"] ]] && KEY="${MOUSE_MAP[$KEY]}"
+	if [ -n "$2" ]; then
+		MACRO+=("hyprctl dispatch hl.dsp.send_key_state({mods = '$MODS', key = '$KEY', state = '$2', window = '$APP'})")
+	else
+		MACRO+=("hyprctl dispatch hl.dsp.send_shortcut({mods = '$MODS', key = '$KEY', window = '$APP'})")
+	fi
+	[ -n "$RANGE" ] && MACRO+=("sleep $(ms_to_s $(randomize $RANGE))")
+	[ -n "$DELAY" ] && MACRO+=("sleep $DELAY")
+}
+
+parallel_execution_check() {
+    local p name
+    local -a all=() exact=() targets=()
+    PARALLELS_PROCESSED=1
+
+    name=$(basename -- "$0")
+
+    find_instances() {
+        all=()
+        exact=()
+
+        while read -r p; do
+            [[ $p == $$ ]] && continue
+            all+=("$p")
+            cmp -s "/proc/$$/cmdline" "/proc/$p/cmdline" &&
+                exact+=("$p")
+        done < <(pgrep -f -- "$name")
+    }
+
+    terminate() {
+        local -n list=$1
+        ((${#list[@]})) && kill "${list[@]}" 2>/dev/null
+    }
+
+    find_instances
+    ((${#all[@]} == 0)) && return 0
+
+	case $MODE in
+    	parallel)
+    		return 0
+        	;;
+    	override-all)
+        	terminate all
+        	;;
+    	cancel-all)
+        	((${#all[@]})) && terminate all && exit
+        	;;
+    	override)
+        	terminate exact
+        	;;
+    	cancel)
+        	((${#exact[@]})) && terminate exact && exit
+        	;;
+        queue)
+        	[ ${#exact[@]} -gt 1 ] && exit
+        	local next_pid="${exact[0]}"
+        	until [ ! -e "/proc/$next_pid" ]; do sleep 0.1; done
+        	;;
+        abort)
+        	((${#exact[@]})) && exit
+        	;;
+    	*)
+        	echo "Unknown mode: $MODE" >&2
+        	false
+        	;;
+	esac
+}
+
+# Process arguments
+while [[ "$#" -gt 0 ]]; do
+    case $1 in
+	-a|--app)
+    	APP="$2"
+    	CLIENTS=$(hyprctl -j clients)
+	
+    	# Handle special arguments
+    	[ "$APP" == "game" ] && APP="class:$(jq -r 'first(.[] | select(.contentType == "game") | .class)' <<< "$CLIENTS")"
+	
+    	# Handle wrongly formatted arguments
+    	[[ "$APP" != *:* ]] && APP=$(jq -r --arg value "$APP" 'first(.[] | if .class == $value then "class:" + $value elif .title == $value then "title:" + $value else empty end) // ("class:" + $value)' <<< "$CLIENTS")
+	
+    	KEY="${APP%%:*}"
+    	VALUE="${APP#*:}"
+    	REGEX_PATTERN="^(${VALUE})$"
+    	ADDRESS=$(jq -r --arg val "$REGEX_PATTERN" --arg key "$KEY" 'first(.[] | select(.[$key] | test($val)) | .address // empty)' <<< "$CLIENTS")
+	
+    	[ -z "$ADDRESS" ] && exit 1
+    	$FOCUS_REQUIRED && [ "address:$ADDRESS" != "$ACTIVE_ADDRESS" ] && exit 1
+    	shift
+    	;;
+    	-m|--mode)
+			case "$2" in
+				cancel|cancel-all|override|override-all|queue|parallel|abort)
+        			MODE="$2"
+        			;;
+    			*)
+        			echo "$2 is not a valid parallel execution mode!"
+        			exit 1
+        			;;
+			esac
+			parallel_execution_check
+    		shift
+    		;;
+    	-F|--focused)
+    		FOCUS_REQUIRED=true
+    		;;
+		-s|--sleep)
+			MACRO+=("sleep $(ms_to_s $2)")
+			shift
+			;;
+		-S|--sleepall)
+			DELAY=$(ms_to_s $2)
+			shift
+			;;
+		-r|--random-delay)
+			RANGE=$2
+			shift
+			;;
+		-h|--help)
+			HELP=true
+			shift
+			;;
+		-k|--key)
+			while [ -n "$2" ] && [ "${2:0:1}" != "-" ]; do
+				shift
+				key "$1"
+			done
+			;;
+		-d|--down)
+			while [ -n "$2" ] && [ "${2:0:1}" != "-" ]; do
+				shift
+				key "$1" "down"
+			done
+			;;
+		-u|--up)
+			while [ -n "$2" ] && [ "${2:0:1}" != "-" ]; do
+				shift
+				key "$1" "up"
+			done
+			;;
+		-m|--mouse)
+			shift
+			MOUSE_X=${1%x*}
+			MOUSE_Y=${1#*x}
+			MACRO+=("hyprctl dispatch hl.dsp.cursor.move({ x = $MOUSE_X, y = $MOUSE_Y })")
+			;;
+		-M|--coord)
+			POS=$(hyprctl cursorpos)
+			echo "${POS//, /x}"
+			notify-send "Cursor Coordinates" "${POS//, /x}"
+			wl-copy "${POS//, /x}"
+			;;
+		-l|--loop)
+			LOOP=$2
+			[ $LOOP -eq 0 ] && LOOPCOUNT=1 # By setting loopcount higher than loop, the loop will become infinite.
+			shift
+			;;
+		--lang)			
+			kb_layout=$(hyprctl devices -j | jq -r '.keyboards[0].layout')
+			MACRO+=("hyprctl keyword input:kb_layout $2")
+			shift
+			;;
+		*)
+			syntax_errors+=($1)
+			;;
+    esac
+    shift
+done
+
+[ -z "$PARALLELS_PROCESSED" ] && parallel_execution_check
+
+[ -n "$kb_layout" ] && MACRO+=("hyprctl keyword input:kb_layout $kb_layout")
+if [ -n "$OLD_PID" ] && ! $ZOMBIE; then # Kill zombies
+	echo "Stopping macro... ($OLD_PID)"
+	kill $OLD_PID
+	exit
+fi
+
+[ -z "$MACRO" ] || "${HELP:-false}" && echo "Usage: hyprkey [options] [keys]
+Example: hyprkey -l 0 -a class:kitty -r 10-20 -k shift+a -s 100 -k shift+v
+Arguments are processed sequentially.
+Options:
+	-a		Send to specific app (Ex: -a address:0x557b19812720)
+	-F		Execute only if target app is currently in focus (must be called before -a)
+	-m		Set parallel execution mode:
+				parallel	 - Run macro in parallel with other running macros.
+				override-all - If any macro is already running, terminate them and execute.
+				cancel-all	 - If any macro is already running, terminate them and exit.
+				queue		 - If this macro is already running, wait for prior execution to finish before starting.
+				override	 - If this macro is already running, terminate it and execute.
+				cancel		 - If this macro is already running, terminate it and exit. (Default)
+				abort		 - If this macro is already running, exit.
+	-k		Press key once (Ex: -k s)
+	-d		Key down (Ex: -d s)
+	-u		Key up (Ex: -u s)OOO
+	-m		Move cursor to coordinates (Ex: -m 1000x500)
+	-M		Report current cursor coordinates and copy them to clipboard
+	-l		Loop macro n times, 0 to loop until macro is invoked again
+	-r		Add randomized range of milliseconds delay between all keystrokes (Ex: -r 5-10)
+	-s		Add milliseconds delay until the next keystroke 
+	-S		Add milliseconds delay between all keystrokes (Ex: -s 100)	
+	-T		Tab into the target application automatically when pressing keys (workaround)
+	--lang	Execute macro with specific keyboard layout (Example: --lang us)
+" && exit
+
+#Execute macro
+while [ $LOOPCOUNT -ne $LOOP ]; do
+	for command in "${MACRO[@]}"; do
+    	$command
+	done
+	((LOOPCOUNT++))
+done
