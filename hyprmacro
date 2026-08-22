@@ -1,7 +1,4 @@
 #!/bin/bash
-#TODO: Some characters (+, -) need to be input as a string (plus, minus)
-#TODO: Sometimes keypresses don't register properly when a game is not in focus, work around this.
-#TODO: Conditional for if a key is down when macro started (maybe too complicated?)
 
 MODE="cancel"
 FOCUS_REQUIRED=false
@@ -140,6 +137,7 @@ while [[ "$#" -gt 0 ]]; do
 	
     	# Handle special arguments
     	[ "$APP" == "game" ] && APP="class:$(jq -r 'first(.[] | select(.contentType == "game") | .class)' <<< "$CLIENTS")"
+    	[ "$APP" == "proton-game" ] && APP="class:$(hyprctl -j clients | jq -r 'first(.[] | select(.xdgTag == "proton-game") | .class)')"
 	
     	# Handle wrongly formatted arguments
     	[[ "$APP" != *:* ]] && APP=$(jq -r --arg value "$APP" 'first(.[] | if .class == $value then "class:" + $value elif .title == $value then "title:" + $value else empty end) // ("class:" + $value)' <<< "$CLIENTS")
@@ -222,7 +220,7 @@ while [[ "$#" -gt 0 ]]; do
 			;;
 		--lang)			
 			kb_layout=$(hyprctl devices -j | jq -r '.keyboards[0].layout')
-			MACRO+=("hyprctl keyword input:kb_layout $2")
+			MACRO+=("hyprctl eval hl.config({ input = { kb_layout = '$2' } })")
 			shift
 			;;
 		*)
@@ -234,15 +232,10 @@ done
 
 [ -z "$PARALLELS_PROCESSED" ] && parallel_execution_check
 
-[ -n "$kb_layout" ] && MACRO+=("hyprctl keyword input:kb_layout $kb_layout")
-if [ -n "$OLD_PID" ] && ! $ZOMBIE; then # Kill zombies
-	echo "Stopping macro... ($OLD_PID)"
-	kill $OLD_PID
-	exit
-fi
+[ -n "$kb_layout" ] && MACRO+=("hyprctl eval hl.config({ input = { kb_layout = '$kb_layout' } })")
 
 [ -z "$MACRO" ] || "${HELP:-false}" && echo "Usage: hyprkey [options] [keys]
-Example: hyprkey -l 0 -a class:kitty -r 10-20 -k shift+a -s 100 -k shift+v
+Example: hyprmacro -F -a 'class:proton-game' -m abort -r 5-20 -l 0 -k mouse1
 Arguments are processed sequentially.
 Options:
 	-a		Send to specific app (Ex: -a address:0x557b19812720)
