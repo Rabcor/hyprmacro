@@ -1,5 +1,5 @@
 # hyprmacro
-hyprmacro is a shell script that interfaces with `hyprctl` in order to create macros. This is a script i made for myself but I figured I might as well share it. Thw script is mostly complete with only some minor conveniences missing, feel free to report any issues you encounter.
+hyprmacro is a shell script that interfaces with `hyprctl` in order to create macros. This is a script i made for myself but I figured I might as well share it. The script is mostly complete with only some minor conveniences missing, feel free to report any issues you encounter.
 
 This script requires hyprland version 0.55+, and it also must be configured with `~/.config/hypr/hyprland.lua` rather than the old `~/.config/hypr/hyprland.conf`.
 
