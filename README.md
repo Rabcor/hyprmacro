@@ -39,7 +39,7 @@ Options:
 
 The -a option will try to interpret any string that does not contain a ':' as either a class or title before giving up so using proper formatting is not strictly necessary.
 
-`-a proton-game` or `-a game` are also specially handled cases that will be interpreted as xdg and content type tags respectively, otherwise the normal syntax for hyprctl applies for this argument.
+`-a proton-game` or `-a game` are also specially handled cases that will be interpreted as xdg and content type tags respectively, otherwise the normal syntax for hyprctl applies for this option.
 
 Some examples:
 ```
@@ -78,3 +78,5 @@ hl.bind("mouse:276", hl.dsp.exec_cmd(hyprmacro .. '-F -a "class:steam_app_136121
 --Macro to shake vending machines that are side by side in Abiotic Factor
 hl.bind("SHIFT + o", hl.dsp.exec_cmd(hyprmacro .. "-a class:steam_app_427410 -l 0 -d e -s 2000 -u e -d a -s 350 -u a -d e -s 2000 -u e -d d -s 350 -u d"), { non_consuming = true })
 ```
+
+As a general rule, when using `-F`, `-a` and/or `-m` options, always use them as your first arguments for efficiency's sake. Because arguments are handled sequentially, and these particular arguments will apply conditional exit clauses so the sooner you put this argument on the command line, the sooner the script will exit in scenarios where it should not trigger.
