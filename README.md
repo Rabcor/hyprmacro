@@ -37,7 +37,9 @@ Options:
 	--lang	Execute macro with specific keyboard layout (Example: --lang us)
 ```
 
-Special handling also allows you to do `-a proton-game` or `-a game` which will interpret them as xdg and content type tags respectively, otherwise the normal syntax for hyprctl applies for this argument.
+The -a option will try to interpret any string that does not contain a ':' as either a class or title before giving up so using proper formatting is not strictly necessary.
+
+`-a proton-game` or `-a game` are also specially handled cases that will be interpreted as xdg and content type tags respectively, otherwise the normal syntax for hyprctl applies for this argument.
 
 Some examples:
 ```
