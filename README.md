@@ -5,7 +5,7 @@ This script requires hyprland version 0.55+, and it also must be configured with
 
 Here is an [older incomplete version](https://gist.github.com/Rabcor/a98c466f3d8268bbc371f92b268ec6b7) that supports the old hyprland config.
 # Installation
-Move the script to either `/usr/bin` or `~/.local/bin` and make it executable.
+Move the script to either `/usr/local/sbin` or `~/.local/bin` and make it executable.
 
 # Usage
 The script has a help dialog which outlines it's features
