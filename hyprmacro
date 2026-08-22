@@ -28,13 +28,6 @@ declare -A MOUSE_MAP=( # These are aliases that can be used when calling for mou
     ["mouse_wheel_up"]="mouse_up"
 )
 
-declare -A SYMBOL_MAP=(
-    ["+"]="plus"
-    ["-"]="minus"
-    ["~"]="grave"
-    ["°"]="dead_abovering"
-)
-
 # Functions
 ms_to_s() {
   printf "%d.%03d" $(($1 / 1000)) $(($1 % 1000))
