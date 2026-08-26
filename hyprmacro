@@ -109,6 +109,7 @@ parallel_execution_check() {
         queue)
         	[ ${#exact[@]} -gt 1 ] && exit
         	local next_pid="${exact[0]}"
+			(( next_pid > $$ )) && return 0
         	until [ ! -e "/proc/$next_pid" ]; do sleep 0.1; done
         	;;
         abort)
